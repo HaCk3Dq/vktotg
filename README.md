@@ -10,5 +10,5 @@ Sends all your music to telegram channel
  open `vktotg.exe`
  
  - Linux: 
- ```pip install bs4 vk_api telethon
- python vktotg.py```
+ `pip install bs4 vk_api telethon`
+ `python vktotg.py`
