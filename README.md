@@ -15,3 +15,6 @@ Sends all your music to telegram channel
  `pip install bs4 vk_api telethon`
  
  `python vktotg.py`
+
+
+[Download](https://github.com/HaCk3Dq/vktotg/archive/master.zip)
