@@ -6,9 +6,12 @@ Sends all your music to telegram channel
 
 # Run
 
- - Windows: 
+ - Windows:
+
  open `vktotg.exe`
  
  - Linux: 
+
  `pip install bs4 vk_api telethon`
+ 
  `python vktotg.py`
