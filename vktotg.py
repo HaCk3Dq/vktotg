@@ -1,6 +1,8 @@
+#!/usr/bin/python3
 # pip install bs4 vk_api telethon
 
 import collections, os, sys, time
+from getpass import getpass
 from urllib.request import urlretrieve
 import webbrowser
 import vk_api
@@ -22,7 +24,7 @@ def captcha_handler(captcha):
   return captcha.try_again(key)
 
 def auth_handler():
-  key = input("Enter authentication code: ")
+  key = getpass("Enter authentication code: ")
   remember_device = True
   return key, remember_device
 
@@ -96,7 +98,7 @@ def send_file(client, entity, file, dur, title, artist, caption):
 def main():
   print('First, log in to vk.com')
   login = input('Enter login: ')
-  password = input('Enter password: ')
+  password = getpass('Enter password: ')
 
   vk_session = vk_api.VkApi(
     login, password,
@@ -122,9 +124,9 @@ def main():
   if not client.is_user_authorized():
     try:
       client.sign_in(phone=input('Enter full phone number: '))
-      client.sign_in(code=input('Enter code that you received: '))
+      client.sign_in(code=getpass('Enter code that you received: '))
     except SessionPasswordNeededError:
-      client.sign_in(password=input('Two step verification is enabled. Please enter your password: '))
+      client.sign_in(password=getpass('Two step verification is enabled. Please enter your password: '))
     
 
   VKMusicChannel = client(CreateChannelRequest(title='VKMusic', about='made with https://github.com/HaCk3Dq/vktotg')).chats[0]
