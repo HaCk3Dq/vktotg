@@ -1,5 +1,8 @@
 # pip install bs4 vk_api
-# if you need auios of specific user, just provide id as argument
+# if you need audios of specific user, just provide id as argument
+# Hint: if you'll use mobile phone as login when launching for the first time,
+#       you can just enter mobile phone and leave password empty in your next logins
+#       user's info saved to vk_config.v2.json
 
 import os, sys, time
 from urllib.request import urlretrieve
@@ -8,9 +11,9 @@ import webbrowser
 import ssl
 import vk_api
 from vk_api.audio import VkAudio
+from getpass import getpass
 
 folderName = "Music"
-
 
 def captcha_handler(captcha):
     url = captcha.get_url()
@@ -65,8 +68,9 @@ def reporthook(count, block_size, total_size):
     else:
         speed = 1
     percent = min(int(count * block_size * 100 / total_size), 100)
-    sys.stdout.write("\r%d%%, %d MB, %d KB/s" % (percent, progress_size / (1024 * 1024), speed))
+    sys.stdout.write("\r%d%%, %0.2f MB, %d KB/s" % (percent, progress_size / (1024 * 1024), speed))
     sys.stdout.flush()
+
 
 
 def save(url, filename, user_id):
@@ -75,8 +79,8 @@ def save(url, filename, user_id):
 
 def main():
     print('First, log in to vk.com')
-    login = input('Enter login: ')
-    password = input('Enter password: ')
+    login = getpass('Enter login: ')
+    password = getpass('Enter password: ')
 
     vk_session = vk_api.VkApi(
         login, password,
@@ -91,10 +95,11 @@ def main():
         return
 
     user_id = str(vk_session.get_api().users.get()[0]['id'])
-    tmp_id = str(sys.argv[1])
-    if not tmp_id == "":
-        user_id = tmp_id
-    print('Fetching audios for ' + user_id)
+    try:
+      user_id = str(sys.argv[1])
+    except IndexError:
+      print('ID not set - working with your profile')
+    print('Downloading audios from ' + user_id)
 
     vkaudio = VkAudio(vk_session)
 
@@ -129,7 +134,7 @@ def main():
         filename = filename.replace('>', '')
         filename = filename.replace(':', '')
 
-        # quickly jump if error occured
+        # quickly jump if error occurred
         # if i < 830:
         #    continue
         if os.path.isfile(folderName + user_id + '/' + filename + '.mp3'):
@@ -149,12 +154,9 @@ def main():
         except ssl.SSLError:
             print('SSL ERROR: ' + filename + ' try launching again')
         sys.stdout.flush()
-
         print()
-        print('Done! Downloaded ' + str(downloaded) + '/' + str(total))
-        if downloaded < total:
-            print('Try to launch again to to download missing')
-        sys.stdout.flush()
-
+    print('Done! Downloaded ' + str(downloaded) + '/' + str(total))
+    if downloaded < total:
+        print('Try to launch again to to download missing files')
 
 if __name__ == '__main__': main()

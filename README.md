@@ -25,3 +25,7 @@ You can provide specific user_id as argument when launching from command line to
 
 Examle:
  `python vktotg_local.py 28452705`
+ 
+>**Hint:** If you'll use mobile phone as login when launching for the first time,
+       you can just enter mobile phone and leave password empty in your next logins.
+       User's info saved to vk_config.v2.json
