@@ -1,5 +1,5 @@
 # pip install bs4 vk_api
-# if you need auios of specific user, just provide id as argument
+# if you need audios of specific user, just provide id as argument
 
 import os, sys, time
 from urllib.request import urlretrieve
@@ -8,9 +8,9 @@ import webbrowser
 import ssl
 import vk_api
 from vk_api.audio import VkAudio
+from getpass import getpass
 
 folderName = "Music"
-
 
 def captcha_handler(captcha):
     url = captcha.get_url()
@@ -65,9 +65,9 @@ def reporthook(count, block_size, total_size):
     else:
         speed = 1
     percent = min(int(count * block_size * 100 / total_size), 100)
-    sys.stdout.write("\r%d%%, %d MB, %d KB/s" % (percent, progress_size / (1024 * 1024), speed))
-    sys.stdout.flush()
+    progress_size = min(int(progress_size / (1024 * 1024)), 100)
 
+    print(percent , '%', progress_size, 'MB', speed, 'KB/s', sep=' ', end='\r\n')
 
 def save(url, filename, user_id):
     urlretrieve(url, folderName + user_id + '/' + filename, reporthook)
@@ -75,8 +75,8 @@ def save(url, filename, user_id):
 
 def main():
     print('First, log in to vk.com')
-    login = input('Enter login: ')
-    password = input('Enter password: ')
+    login = getpass('Enter login: ')
+    password = getpass('Enter password: ')
 
     vk_session = vk_api.VkApi(
         login, password,
@@ -91,10 +91,13 @@ def main():
         return
 
     user_id = str(vk_session.get_api().users.get()[0]['id'])
-    tmp_id = str(sys.argv[1])
-    if not tmp_id == "":
-        user_id = tmp_id
-    print('Fetching audios for ' + user_id)
+
+    try:
+      user_id = str(sys.argv[1])
+    except IndexError:
+      print('ID not set - work with our profile')
+
+    print('Downloading audios from ' + user_id)
 
     vkaudio = VkAudio(vk_session)
 
@@ -149,11 +152,11 @@ def main():
         except ssl.SSLError:
             print('SSL ERROR: ' + filename + ' try launching again')
         sys.stdout.flush()
-
+        
         print()
         print('Done! Downloaded ' + str(downloaded) + '/' + str(total))
         if downloaded < total:
-            print('Try to launch again to to download missing')
+            print('Finding next track...')
         sys.stdout.flush()
 
 
