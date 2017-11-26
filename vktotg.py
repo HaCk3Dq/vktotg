@@ -159,7 +159,7 @@ def main():
   chunk = None
   while chunk != last_chunk:
     last_chunk = chunk
-    chunk = vkaudio.get(user_id, offset)
+    chunk = vkaudio.get(user_id, None, offset)
     audios.extend(chunk)
     offset += 50
   total = len(audios)
