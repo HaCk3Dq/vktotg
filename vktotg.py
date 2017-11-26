@@ -2,7 +2,7 @@
 # pip install bs4 vk_api telethon
 
 import collections, os, sys, time, ssl
-from urllib.request import urlretrieve
+import shutil, requests
 import webbrowser
 import vk_api
 from vk_api.audio import VkAudio
@@ -67,7 +67,10 @@ def reporthook(count, block_size, total_size):
   sys.stdout.flush()
 
 def save(url, filename):
-  urlretrieve(url, filename, reporthook)
+  response = requests.get(url, stream=True)
+  with open(filename, 'wb') as out_file:
+    shutil.copyfileobj(response.raw, out_file)
+  del response
 
 def send_file(client, entity, file, dur, title, artist, caption):
   file_hash = hash(file)
