@@ -2,7 +2,7 @@
 # pip install bs4 vk_api telethon
 
 import collections, os, sys, time, ssl
-from urllib.request import urlretrieve
+import shutil, requests
 import webbrowser
 import vk_api
 from vk_api.audio import VkAudio
@@ -11,7 +11,7 @@ from telethon.errors import SessionPasswordNeededError
 from telethon.tl.functions.channels import CreateChannelRequest, EditPhotoRequest
 from telethon.tl.functions.messages import SendMediaRequest, DeleteMessagesRequest, GetDialogsRequest
 from telethon.tl.types import (
-  DocumentAttributeAudio, DocumentAttributeFilename, 
+  DocumentAttributeAudio, DocumentAttributeFilename,
   Channel, InputMediaUploadedDocument, InputChannel,
   InputChatUploadedPhoto
 )
@@ -67,7 +67,10 @@ def reporthook(count, block_size, total_size):
   sys.stdout.flush()
 
 def save(url, filename):
-  urlretrieve(url, filename, reporthook)
+  response = requests.get(url, stream=True)
+  with open(filename, 'wb') as out_file:
+    shutil.copyfileobj(response.raw, out_file)
+  del response
 
 def send_file(client, entity, file, dur, title, artist, caption):
   file_hash = hash(file)
@@ -130,7 +133,7 @@ def auth_tg():
 def main():
   store_local = input('Do you want to leave the local files? [N/y] ') in ['y', 'yes']
   folderName = 'Music '
-  
+
   vkaudio, user_id = auth_vk()
   client = auth_tg()
 
@@ -139,7 +142,7 @@ def main():
   _, entities = client.get_dialogs(limit=100)
   for e in entities:
     if type(e) == Channel and e.title == 'VKMusic': VKMusicChannel = e
-  
+
   if VKMusicChannel is None:
     VKMusicChannel = client(CreateChannelRequest(title='VKMusic', about='made with https://github.com/HaCk3Dq/vktotg')).chats[0]
     client(EditPhotoRequest(
@@ -156,25 +159,27 @@ def main():
   chunk = None
   while chunk != last_chunk:
     last_chunk = chunk
-    chunk = vkaudio.get(user_id, offset)
+    chunk = vkaudio.get(user_id, None, offset)
     audios.extend(chunk)
     offset += 50
   total = len(audios)
   print()
-  
+
   for i, track in enumerate(audios[::-1]):
     if progress and i < progress-1: continue
     filename = track['artist'] + ' - ' + track['title']
+    escaped_filename = filename.replace("/","_")
+    file_path = folderName + str(user_id) + '/' + escaped_filename +'.mp3'
+
     print('Downloading [' + str(i+1) + '/' + str(total) + ']')
-    
     try:
-      save(track['url'], folderName + str(user_id) + '/' + str(i)+'.mp3')
+      save(track['url'], file_path)
     except HTTPError:
-      print('ERROR: ' + filename)
+      print('ERROR: ' + escaped_filename)
     except ssl.SSLError:
-      print('SSL ERROR: ' + filename + ', launching again...')
+      print('SSL ERROR: ' + escaped_filename + ', launching again...')
       try:
-        save(track['url'], str(i)+'.mp3')
+        save(track['url'], escaped_filename +'.mp3')
       except:
         print('Failed to save track after 2 tries [' + str(i+1) + '/' + str(total) + ']')
         exit()
@@ -183,8 +188,8 @@ def main():
     sys.stdout.flush()
     try:
       send_file(
-        client, client.get_entity(VKMusicChannel), 
-        folderName + str(user_id) + '/' + str(i)+'.mp3', 
+        client, client.get_entity(VKMusicChannel),
+        file_path,
         track['dur'], track['title'],
         track['artist'], filename
       )
@@ -192,7 +197,7 @@ def main():
       print('Failed to send track ' + str(i) + ', try again')
       exit()
 
-    if not store_local: os.remove(folderName + str(user_id) + '/' + str(i)+'.mp3')
+    if not store_local: os.remove(file_path)
     print()
     sys.stdout.flush()
 
