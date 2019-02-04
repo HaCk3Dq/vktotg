@@ -1,206 +1,180 @@
 #!/usr/bin/python3
-# pip install bs4 vk_api telethon
 
-import collections, os, sys, time, ssl
-import shutil, requests
+import os
+import sys
+import ssl
+import shutil
+import requests
 import webbrowser
 import vk_api
+from getpass import getpass
 from vk_api.audio import VkAudio
-from telethon import TelegramClient
+from telethon.sync import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 from telethon.tl.functions.channels import CreateChannelRequest, EditPhotoRequest
-from telethon.tl.functions.messages import SendMediaRequest, DeleteMessagesRequest, GetDialogsRequest
 from telethon.tl.types import (
-  DocumentAttributeAudio, DocumentAttributeFilename,
-  Channel, InputMediaUploadedDocument, InputChannel,
-  InputChatUploadedPhoto
+    DocumentAttributeAudio, DocumentAttributeFilename, Channel, InputChannel, InputChatUploadedPhoto
 )
 
+folderName = 'Music '
+channelName = 'VKMusic'
+
+
 def captcha_handler(captcha):
-  url = captcha.get_url()
-  key = input("Enter captcha code {0}: ".format(url)).strip()
-  webbrowser.open(url, new=2, autoraise=True)
-  return captcha.try_again(key)
+    url = captcha.get_url()
+    key = input("Enter captcha code {0}: ".format(url)).strip()
+    webbrowser.open(url, new=2, autoraise=True)
+    return captcha.try_again(key)
+
 
 def auth_handler():
-  key = input("Enter authentication code: ")
-  remember_device = True
-  return key, remember_device
+    key = input("Enter authentication code: ")
+    remember_device = True
+    return key, remember_device
 
-def get(self, owner_id, offset=0):
-  response = self._vk.http.get(
-    'https://m.vk.com/audios{}'.format(owner_id),
-    params={'offset': offset},
-    allow_redirects=False
-  )
-  if not response.text:
-    raise AccessDenied('You don\'t have permissions to browse {}\'s audio'.format(owner_id))
-  return scrap_data(response.text)
 
-def scrap_data(html):
-  soup = BeautifulSoup(html, 'html.parser')
-  tracks = []
-  for audio in soup.find_all('div', {'class': 'audio_item ai_has_btn'}):
-    ai_artist = audio.select('.ai_artist')
-    artist = ai_artist[0].text
-    link = audio.select('.ai_body')[0].input['value']
-    if 'audio_api_unavailable' in link: link = decode_audio_url(link)
-    tracks.append({
-      'artist': artist,
-      'title': audio.select('.ai_title')[0].text,
-      'dur': audio.select('.ai_dur')[0]['data-dur'],
-      'url': link
-    })
-  return tracks
+def reporthook(sent_bytes, total):
+    sys.stdout.write(
+        f'\r{round(sent_bytes / total * 100, 1)}% {round(sent_bytes / 1024 / 1024, 1)}/{round(total / 1024 / 1024, 1)} MB'
+    )
+    sys.stdout.flush()
 
-def reporthook(count, block_size, total_size):
-  global start_time
-  if count == 0:
-    start_time = time.time()
-    return
-  duration = time.time() - start_time
-  progress_size = int(count * block_size)
-  if duration != 0: speed = int(progress_size / (1024 * duration))
-  else: speed = 1
-  percent = min(int(count * block_size * 100 / total_size), 100)
-  sys.stdout.write("\r%d%%, %d MB, %d KB/s" % (percent, progress_size / (1024 * 1024), speed))
-  sys.stdout.flush()
 
 def save(url, filename):
-  response = requests.get(url, stream=True)
-  with open(filename, 'wb') as out_file:
-    shutil.copyfileobj(response.raw, out_file)
-  del response
+    response = requests.get(url, stream=True)
+    with open(filename, 'wb') as out_file:
+        shutil.copyfileobj(response.raw, out_file)
+    del response
+
 
 def send_file(client, entity, file, dur, title, artist, caption):
-  file_hash = hash(file)
-  if file_hash in client._upload_cache: file_handle = client._upload_cache[file_hash]
-  else: client._upload_cache[file_hash] = file_handle = client.upload_file(file)
-  attr_dict = {
-    DocumentAttributeFilename:
-    DocumentAttributeFilename(caption),
-    DocumentAttributeAudio:
-    DocumentAttributeAudio(int(dur), title=title, performer=artist)
-  }
-  media = InputMediaUploadedDocument(
-    file=file_handle,
-    mime_type='audio/mpeg',
-    attributes=list(attr_dict.values()),
-    caption=''
-  )
-  client(SendMediaRequest(
-    peer=client.get_input_entity(entity),
-    media=media,
-    reply_to_msg_id=None
-  ))
+    attr_dict = {
+        DocumentAttributeFilename:
+        DocumentAttributeFilename(caption),
+        DocumentAttributeAudio:
+        DocumentAttributeAudio(int(dur), title=title, performer=artist)
+    }
+    client.send_file(
+        entity, file,
+        progress_callback=reporthook,
+        attributes=list(attr_dict.values())
+    )
+
 
 def auth_vk():
-  print('First, log in to vk.com')
-  folderName = 'Music '
-  vk_session = vk_api.VkApi(
-    input('Enter login: '),
-    input('Enter password: '),
-    captcha_handler=captcha_handler,
-    auth_handler=auth_handler
-  )
+    print('First, log in to vk.com')
 
-  try:
-    vk_session.auth()
-  except vk_api.AuthError as error_msg:
-    print(error_msg)
-    return
+    vk_session = vk_api.VkApi(
+        input('Enter login: '),
+        getpass('Enter password: '),
+        captcha_handler=captcha_handler,
+        auth_handler=auth_handler
+    )
 
-  user_id = vk_session.get_api().users.get()[0]['id']
-  try:
-    user_id = str(sys.argv[1])
-    print('Downloading audios from ' + user_id)
-  except: pass
-  if not os.path.exists(folderName + str(user_id)): os.mkdir(folderName + str(user_id))
-  return VkAudio(vk_session), user_id
-
-def auth_tg():
-  client = TelegramClient('MusicSaver', 184825, '7fd2ade01360bdd6cbc1de0f0120092c')
-  client.connect()
-  print('\nNow, log in to telegram')
-  if not client.is_user_authorized():
     try:
-      client.sign_in(phone=input('Enter full phone number: '))
-      client.sign_in(code=input('Enter code that you received: '))
-    except SessionPasswordNeededError:
-      client.sign_in(password=input('Two step verification is enabled. Please enter your password: '))
-  return client
-
-def main():
-  store_local = input('Do you want to leave the local files? [N/y] ') in ['y', 'yes']
-  folderName = 'Music '
-
-  vkaudio, user_id = auth_vk()
-  client = auth_tg()
-
-  VKMusicChannel = None
-  progress = 0
-  _, entities = client.get_dialogs(limit=100)
-  for e in entities:
-    if type(e) == Channel and e.title == 'VKMusic': VKMusicChannel = e
-
-  if VKMusicChannel is None:
-    VKMusicChannel = client(CreateChannelRequest(title='VKMusic', about='made with https://github.com/HaCk3Dq/vktotg')).chats[0]
-    client(EditPhotoRequest(
-      InputChannel(VKMusicChannel.id, VKMusicChannel.access_hash), InputChatUploadedPhoto(client.upload_file('music.jpg'))
-    ))
-    client.delete_messages(client.get_entity(VKMusicChannel), 2)
-  else:
-    progress = client.get_message_history(VKMusicChannel)[0]
-    print('\nFound ' + str(progress) + ' tracks, continue downloading...')
-
-  offset = 0
-  audios = []
-  last_chunk = []
-  chunk = None
-  while chunk != last_chunk:
-    last_chunk = chunk
-    chunk = vkaudio.get(user_id, None, offset)
-    audios.extend(chunk)
-    offset += 50
-  total = len(audios)
-  print()
-
-  for i, track in enumerate(audios[::-1]):
-    if progress and i < progress-1: continue
-    filename = track['artist'] + ' - ' + track['title']
-    escaped_filename = filename.replace("/","_")
-    file_path = folderName + str(user_id) + '/' + escaped_filename +'.mp3'
-
-    print('Downloading [' + str(i+1) + '/' + str(total) + ']')
-    try:
-      save(track['url'], file_path)
-    except HTTPError:
-      print('ERROR: ' + escaped_filename)
-    except ssl.SSLError:
-      print('SSL ERROR: ' + escaped_filename + ', launching again...')
-      try:
-        save(track['url'], escaped_filename +'.mp3')
-      except:
-        print('Failed to save track after 2 tries [' + str(i+1) + '/' + str(total) + ']')
+        vk_session.auth()
+    except vk_api.AuthError as error_msg:
+        print(error_msg)
         exit()
 
-    print('\nUploading...')
-    sys.stdout.flush()
+    user_id = vk_session.get_api().users.get()[0]['id']
     try:
-      send_file(
-        client, client.get_entity(VKMusicChannel),
-        file_path,
-        track['dur'], track['title'],
-        track['artist'], filename
-      )
+        user_id = str(sys.argv[1])
+        print(f'Downloading audios from {user_id}')
     except:
-      print('Failed to send track ' + str(i) + ', try again')
-      exit()
+        pass
+    if not os.path.exists(folderName + str(user_id)):
+        os.mkdir(folderName + str(user_id))
+    return VkAudio(vk_session), user_id
 
-    if not store_local: os.remove(file_path)
-    print()
-    sys.stdout.flush()
 
-  client.disconnect()
+def auth_tg():
+    print('\nNow, log in to telegram')
+    client = TelegramClient('MusicSaver', 184825, '7fd2ade01360bdd6cbc1de0f0120092c').start()
+    client.connect()
+    if not client.is_user_authorized():
+        try:
+            client.sign_in(phone=input('Enter full phone number: '))
+            client.sign_in(code=input('Enter code that you received: '))
+        except SessionPasswordNeededError:
+            client.sign_in(password=input('Two step verification is enabled. Please enter your password: '))
+    return client
 
-if __name__ == '__main__': main()
+
+def main():
+    store_local = input('Do you want to leave the local files? [N/y] ') in ['y', 'yes']
+
+    vkaudio, user_id = auth_vk()
+    with auth_tg() as client:
+
+        VKMusicChannel = None
+        last_file = None
+        progress = 0
+
+        dialogs = client.get_dialogs(limit=None)
+        for chat in dialogs:
+            if type(chat.entity) == Channel and chat.title == channelName:
+                VKMusicChannel = chat
+
+        if VKMusicChannel is None:
+            VKMusicChannel = client(CreateChannelRequest(
+                title=channelName, about='made with https://github.com/HaCk3Dq/vktotg')).chats[0]
+            client(EditPhotoRequest(
+                InputChannel(VKMusicChannel.id, VKMusicChannel.access_hash), InputChatUploadedPhoto(
+                    client.upload_file('music.jpg'))
+            ))
+            client.delete_messages(client.get_entity(VKMusicChannel), 2)
+        else:
+            last_file = client.get_messages(VKMusicChannel, limit=None)[0].document
+            if last_file:
+                last_file = last_file.attributes[1].file_name
+
+        audios = vkaudio.get(user_id)
+        total = len(audios)
+        if last_file:
+            progress = [track['artist'] + ' - ' + track['title'] for track in audios[::-1]].index(last_file) + 1
+            if progress == total:
+                print(f'[Done] Found {progress}/{total} tracks')
+                exit()
+            else:
+                print(f'\nFound {progress}/{total} tracks, continue downloading...')
+        print()
+
+        progress += 1
+        for i, track in enumerate(audios[::-1]):
+            if progress and i < progress - 1:
+                continue
+            filename = track['artist'] + ' - ' + track['title']
+            escaped_filename = filename.replace("/", "_")
+            file_path = folderName + str(user_id) + '/' + escaped_filename + '.mp3'
+
+            print(f'Downloading [{i + 1}/{total}]')
+            print(filename)
+            try:
+                save(track['url'], file_path)
+            except ssl.SSLError:
+                print(f'SSL ERROR: {escaped_filename}, launching again...')
+                try:
+                    save(track['url'], escaped_filename + '.mp3')
+                except:
+                    print(f'Failed to save track after 2 tries [{i + 1}/{total}]')
+                    exit()
+
+            print('\nUploading...')
+            sys.stdout.flush()
+            send_file(
+                client, client.get_entity(VKMusicChannel),
+                file_path,
+                track['duration'], track['title'],
+                track['artist'], filename
+            )
+
+            if not store_local:
+                os.remove(file_path)
+            print()
+            sys.stdout.flush()
+
+
+if __name__ == '__main__':
+    main()
+    print('[Done] Finished uploading all the tracks')
