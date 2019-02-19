@@ -99,3 +99,7 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+# cache
+MusicSaver.session
+vk_config.v2.json
