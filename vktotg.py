@@ -100,6 +100,29 @@ def auth_tg():
             client.sign_in(password=input('Two step verification is enabled. Please enter your password: '))
     return client
 
+def get_last_readable_track_in_channel(telegramMessagesList, vkAudioList):
+    offset = 0
+    local_progress = 0
+    iterator = len(telegramMessagesList)
+    while iterator > 0 and iterator != -5000:
+        last_file = telegramMessagesList[offset].document
+        if last_file:
+            lastAudioName = last_file.attributes[1].file_name
+        else:
+            offset = offset + 1
+            iterator = iterator - 1
+            continue
+        try:
+            local_progress = vkAudioList.index(lastAudioName)
+        except ValueError:
+            print("vk Audio List does not contain value: " + lastAudioName)
+        if local_progress > 0:
+            return local_progress+offset
+        else:
+            offset = offset + 1
+            iterator = iterator - 1
+    return 0
+
 
 def main():
     store_local = input('Do you want to leave the local files? [N/y] ') in ['y', 'yes']
@@ -132,7 +155,18 @@ def main():
         audios = vkaudio.get(user_id)
         total = len(audios)
         if last_file:
-            progress = [track['artist'] + ' - ' + track['title'] for track in audios[::-1]].index(last_file) + 1
+            vkAudioList = [track['artist'] + ' - ' + track['title'] for track in audios[::-1]]
+            # try get offset by last saved track
+            try:
+                progress = vkAudioList.index(last_file)
+            except ValueError:
+                print("vk Audio List does not contain value: " + last_file)
+            if progress:
+                progress = progress + 1
+            else:
+                # try get offset from last readable track
+                telegramMessagesList = client.get_messages(VKMusicChannel, limit=None)
+                progress = get_last_readable_track_in_channel(telegramMessagesList, vkAudioList)+1
             if progress == total:
                 print(f'[Done] Found {progress}/{total} tracks')
                 exit()
@@ -146,6 +180,7 @@ def main():
                 continue
             filename = track['artist'] + ' - ' + track['title']
             escaped_filename = filename.replace("/", "_")
+            escaped_filename  = ''.join(e for e in escaped_filename if e.isalnum() or e == '_')
             file_path = folderName + str(user_id) + '/' + escaped_filename + '.mp3'
 
             print(f'Downloading [{i + 1}/{total}]')
